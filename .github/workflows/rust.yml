@@ -22,11 +22,6 @@ jobs:
             ./target
         key: ${{ runner.os }}-${{ hashFiles('**/Cargo.toml') }}
 
-    - name: Run tests
-      run: cargo test 
-      env:
-          CARGO_HOME: /usr/local/cargo
-
     - name: Build static
       uses: stevenleadbeater/rust-musl-builder@master
       with:
