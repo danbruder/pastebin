@@ -20,7 +20,7 @@ jobs:
         path: |
             ./.cargo-home
             ./target
-        key: ${{ hashFiles('Cargo.lock') }}
+        key: v1
 
     - name: Build static
       uses: stevenleadbeater/rust-musl-builder@master
