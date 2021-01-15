@@ -18,10 +18,7 @@ jobs:
       uses: actions/cache@v2
       with:
         path: |
-            ./.cargo-home/bin
-            ./.cargo-home/registry/index
-            ./.cargo-home/registry/cache
-            ./.cargo-home/git/db
+            ./.cargo-home
             ./target
         key: ${{ runner.os }}-${{ hashFiles('**/Cargo.toml') }}
 
