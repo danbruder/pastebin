@@ -17,7 +17,7 @@ jobs:
     - name: Cache deps
       uses: actions/cache@v2
       with:
-        path: ./.cargo-home
+        path: ./cargo-home
         key: v1-cargo
         restore-keys: |
           v1-cargo
@@ -33,7 +33,7 @@ jobs:
     - name: Build static
       uses: stevenleadbeater/rust-musl-builder@master
       with:
-          args: /bin/bash -c "CARGO_HOME=./.cargo-home cargo build --release --target=x86_64-unknown-linux-musl"
+          args: /bin/bash -c "CARGO_HOME=./cargo-home cargo build --release --target=x86_64-unknown-linux-musl"
 
     - name: Upload binary
       uses: actions/upload-artifact@v2
