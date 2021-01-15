@@ -81,6 +81,7 @@ fn get_html(db: Db) -> String {
 
 </head>
 <body>
+    <h1>Pastebin!</h1>
     <form method="POST" action="/bin">
         <textarea class="shadow" name="val"/></textarea>
 
