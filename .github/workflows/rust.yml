@@ -17,10 +17,18 @@ jobs:
     - name: Cache deps
       uses: actions/cache@v2
       with:
-        path: |
-            ./.cargo-home
-            ./target
-        key: v1
+        path: ./.cargo-home
+        key: v1-cargo
+        restore-keys: |
+          v1-cargo
+
+    - name: Cache target
+      uses: actions/cache@v2
+      with:
+        path: ./target
+        key: v1-target
+        restore-keys: |
+          v1-target
 
     - name: Build static
       uses: stevenleadbeater/rust-musl-builder@master
