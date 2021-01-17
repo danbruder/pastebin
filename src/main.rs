@@ -81,7 +81,7 @@ async fn main() {
     let tree = Db { tree };
     let db = warp::any().map(move || tree.clone());
 
-    let create_paste = warp::path!("paste" / "new")
+    let create_paste = warp::path!("pastes" / "new")
         .and(warp::post())
         .and(warp::body::form())
         .and(db.clone())
@@ -93,7 +93,7 @@ async fn main() {
             Ok::<_, Rejection>(warp::redirect(paste.uri()))
         });
 
-    let show_paste = warp::path!("bin" / Uuid)
+    let show_paste = warp::path!("pastes" / Uuid)
         .and(warp::get())
         .and(db.clone())
         .and_then(|id: Uuid, db: Db| async move {
@@ -121,7 +121,7 @@ fn get_html(db: Db) -> String {
         .map(|p| {
             format!(
                 r#"
-            <li><a href="/bin/{0}">{0}</a></li>
+            <li><a href="/pastes/{0}">{0}</a></li>
             "#,
                 p.id
             )
@@ -140,10 +140,14 @@ fn get_html(db: Db) -> String {
 </head>
 <body>
     <h1>Pastebin!</h1>
-    <form method="POST" action="/bin">
-        <textarea class="shadow" name="val"/></textarea>
+    <form method="POST" action="/pastes/new">
+        <div>
+            <textarea class="shadow" name="body"/></textarea>
+        </div>
 
-        <input type="submit" value="save"/>
+        <div>
+            <input type="submit" value="Save"/>
+        </div>
     </form>
     <div>
         <ul>
