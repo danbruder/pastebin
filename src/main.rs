@@ -1,71 +1,129 @@
 use std::str::FromStr;
 
-use serde_json::{json, Value};
+use serde::{Deserialize, Serialize};
 use sled_extensions::{json::JsonEncoding, Config, DbExt};
 use std::collections::HashMap;
+use std::convert::Infallible;
 use uuid::Uuid;
-use warp::http::Uri;
-
 use warp::Filter;
-type Db = sled_extensions::structured::Tree<Value, JsonEncoding>;
+use warp::{
+    http::{uri::InvalidUri, StatusCode, Uri},
+    reject::{Reject, Rejection},
+    Reply,
+};
+
+type Tree = sled_extensions::structured::Tree<Paste, JsonEncoding>;
+
+#[derive(Clone)]
+struct Db {
+    tree: Tree,
+}
+
+impl Db {
+    pub fn get(&self, id: Uuid) -> Result<Paste> {
+        match self.tree.get(id.as_bytes()) {
+            Ok(Some(val)) => Ok(val),
+            _ => panic!("atd"),
+        }
+    }
+
+    pub fn insert(&self, id: &Uuid, value: &Paste) -> Result<()> {
+        match self.tree.insert(id.as_bytes(), value.clone()) {
+            Ok(Some(_)) => Ok(()),
+            _ => panic!("atd"),
+        }
+    }
+
+    pub fn all(&self) -> Vec<Paste> {
+        self.tree
+            .iter()
+            .filter_map(std::result::Result::ok)
+            .map(|(_, v)| v)
+            .collect::<Vec<Paste>>()
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum Error {
+    #[error("sled db error")]
+    SledError(#[from] sled_extensions::Error),
+    #[error("Invalid Uri")]
+    UriError(#[from] InvalidUri),
+    #[error("Not Found")]
+    NotFound,
+}
+
+type Result<T> = std::result::Result<T, Error>;
+
+impl Reject for Error {}
+impl From<Error> for Rejection {
+    fn from(other: Error) -> Self {
+        warp::reject::custom::<Error>(other.into())
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct Paste {
+    id: Uuid,
+    body: String,
+}
+
+impl Paste {
+    pub fn uri(&self) -> Uri {
+        Uri::from_str(&format!("/bin/{}", self.id)).expect("Cannot fail")
+    }
+}
 
 #[tokio::main]
 async fn main() {
     let db = Config::default().temporary(true).open().unwrap();
-    let tree = db.open_json_tree::<Value>("json-tree").unwrap();
+    let tree = db.open_json_tree::<Paste>("paste").unwrap();
+    let tree = Db { tree };
     let db = warp::any().map(move || tree.clone());
 
-    let bin = warp::path!("bin")
+    let create_paste = warp::path!("paste" / "new")
         .and(warp::post())
         .and(warp::body::form())
         .and(db.clone())
-        .map(|simple_map: HashMap<String, String>, db: Db| {
+        .and_then(|simple_map: HashMap<String, String>, db: Db| async move {
             let id = Uuid::new_v4();
-            let val = simple_map.get("val").cloned().unwrap_or_default();
-            let val = json!({
-                "id": id,
-                "val": val
-            });
-
-            let _ = db.insert(id.as_bytes(), val).unwrap();
-            let uri = Uri::from_str(&format!("/bin/{}", id)).unwrap();
-            warp::redirect(uri)
+            let body = simple_map.get("body").cloned().unwrap_or_default();
+            let paste = Paste { id, body };
+            db.insert(&id, &paste)?;
+            Ok::<_, Rejection>(warp::redirect(paste.uri()))
         });
 
-    let get_bin = warp::path!("bin" / Uuid)
+    let show_paste = warp::path!("bin" / Uuid)
         .and(warp::get())
         .and(db.clone())
-        .map(|id: Uuid, db: Db| {
-            let stuff = if let Some(val) = db.get(id.as_bytes()).unwrap() {
-                format!("{}", val["val"].as_str().unwrap())
-            } else {
-                "not found".into()
-            };
-
-            warp::reply::html(stuff)
+        .and_then(|id: Uuid, db: Db| async move {
+            let paste = db.get(id)?;
+            Ok::<_, Rejection>(warp::reply::html(paste.body))
         });
 
     let home = warp::path::end()
         .and(warp::get())
         .and(db.clone())
         .map(|db: Db| warp::reply::html(get_html(db)));
-    let routes = get_bin.or(bin).or(home);
 
-    // Start up the server...
+    let routes = create_paste
+        .or(show_paste)
+        .or(home)
+        .recover(handle_rejection);
+
     warp::serve(routes).run(([0, 0, 0, 0], 3030)).await;
 }
 
 fn get_html(db: Db) -> String {
     let bins = db
-        .iter()
-        .filter_map(Result::ok)
-        .map(|(_, v)| {
-            let id = v["id"].as_str().unwrap();
+        .all()
+        .into_iter()
+        .map(|p| {
             format!(
                 r#"
-            <li><a href="/bin/{}">{}</a></li>
+            <li><a href="/bin/{0}">{0}</a></li>
             "#,
-                id, id,
+                p.id
             )
         })
         .collect::<Vec<String>>()
@@ -97,4 +155,18 @@ fn get_html(db: Db) -> String {
     "#,
         bins
     )
+}
+
+async fn handle_rejection(r: Rejection) -> std::result::Result<impl Reply, Infallible> {
+    if let Some(e) = r.find::<Error>() {
+        Ok(warp::reply::with_status(
+            e.to_string(),
+            StatusCode::BAD_REQUEST,
+        ))
+    } else {
+        Ok(warp::reply::with_status(
+            String::from("Something bad happened"),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        ))
+    }
 }
