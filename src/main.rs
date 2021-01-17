@@ -76,7 +76,7 @@ impl Paste {
 
 #[tokio::main]
 async fn main() {
-    let db = Config::default().temporary(true).open().unwrap();
+    let db = Config::default().path("./data").open().unwrap();
     let tree = db.open_json_tree::<Paste>("paste").unwrap();
     let tree = Db { tree };
     let db = warp::any().map(move || tree.clone());
